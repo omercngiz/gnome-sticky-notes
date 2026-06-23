@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+  <template class="GnomeStickyNotesWindow" parent="AdwApplicationWindow">
+    <property name="title" translatable="yes">Note</property>
+    <property name="default-width">280</property>
+    <property name="default-height">320</property>
+    <property name="content">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="show-title">False</property>
+            <child type="start">
+              <object class="GtkButton">
+                <property name="icon-name">list-add-symbolic</property>
+                <property name="tooltip-text" translatable="yes">New Note</property>
+                <property name="action-name">app.new-note</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkMenuButton">
+                <property name="primary">True</property>
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Main Menu</property>
+                <property name="menu-model">primary_menu</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkButton">
+                <property name="icon-name">user-trash-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Delete Note</property>
+                <property name="action-name">win.delete</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkScrolledWindow">
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <property name="child">
+              <object class="GtkTextView" id="text_view">
+                <property name="wrap-mode">word-char</property>
+                <property name="top-margin">8</property>
+                <property name="bottom-margin">8</property>
+                <property name="left-margin">8</property>
+                <property name="right-margin">8</property>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+  <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_New Note</attribute>
+        <attribute name="action">app.new-note</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Settings</attribute>
+        <attribute name="action">app.preferences</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_About Gnome Sticky Notes</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Quit</attribute>
+        <attribute name="action">app.quit</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

@@ -1,0 +1,8 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+data/io.omercngiz.GnomeStickyNotes.desktop.in
+data/io.omercngiz.GnomeStickyNotes.metainfo.xml.in
+data/io.omercngiz.GnomeStickyNotes.gschema.xml
+src/gnome-sticky-notes-application.c
+src/gnome-sticky-notes-window.ui
+src/main.c
