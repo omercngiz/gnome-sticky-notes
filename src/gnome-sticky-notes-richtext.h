@@ -52,6 +52,10 @@ void gnome_sticky_notes_rich_text_set_color     (GnomeStickyNotesRichText       
 void gnome_sticky_notes_rich_text_set_alignment (GnomeStickyNotesRichText       *self,
                                                   GtkJustification                justification);
 
+/* Turns the paragraph containing the cursor into a ToDo item (a leading
+ * checkbox + the existing line text). No-op if it already is one. */
+void gnome_sticky_notes_rich_text_insert_todo   (GnomeStickyNotesRichText       *self);
+
 /* State getters reflecting the formatting at the cursor / selection. Valid to
  * call at any time, intended for use from a "state-changed" handler. */
 gboolean         gnome_sticky_notes_rich_text_get_toggle    (GnomeStickyNotesRichText       *self,

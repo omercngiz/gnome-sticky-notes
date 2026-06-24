@@ -167,6 +167,13 @@
                 </property>
               </object>
             </child>
+            <child type="start">
+              <object class="GtkButton">
+                <property name="icon-name">checkbox-checked-symbolic</property>
+                <property name="action-name">win.insert-todo</property>
+                <property name="tooltip-text" translatable="yes">Add ToDo Item</property>
+              </object>
+            </child>
           </object>
         </child>
         <property name="content">

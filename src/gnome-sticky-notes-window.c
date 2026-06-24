@@ -419,6 +419,13 @@ align_fill_action (GSimpleAction *action, GVariant *parameter, gpointer user_dat
 	gnome_sticky_notes_rich_text_set_alignment (self->rich_text, GTK_JUSTIFY_FILL);
 }
 
+static void
+insert_todo_action (GSimpleAction *action, GVariant *parameter, gpointer user_data)
+{
+	GnomeStickyNotesWindow *self = user_data;
+	gnome_sticky_notes_rich_text_insert_todo (self->rich_text);
+}
+
 static const GActionEntry win_actions[] = {
 	{ "delete", delete_action },
 	{ "fmt-bold", fmt_bold_action },
@@ -428,6 +435,7 @@ static const GActionEntry win_actions[] = {
 	{ "align-center", align_center_action },
 	{ "align-right", align_right_action },
 	{ "align-fill", align_fill_action },
+	{ "insert-todo", insert_todo_action },
 };
 
 static void

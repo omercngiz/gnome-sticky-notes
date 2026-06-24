@@ -9,18 +9,24 @@
 
 #include "gnome-sticky-notes-richtext.h"
 
+#include <gdk/gdkkeysyms.h>
 #include <string.h>
 
-/* Prefix marking a stored note as rich text. Anything without it is treated
- * as legacy plain text, so old notes keep opening correctly. */
-#define RICH_TEXT_MARKER "GSNRT1:"
+/* Prefix marking a stored note as rich text. Anything without a known marker
+ * is treated as legacy plain text, so old notes keep opening correctly.
+ * V1 = pre-ToDo format; V2 adds the todo-run field. The marker bytes are the
+ * same length so stripping/offsetting is uniform. */
+#define RICH_TEXT_MARKER    "GSNRT2:"
+#define RICH_TEXT_MARKER_V1 "GSNRT1:"
 
 /* GVariant layout of a serialized note:
- *   s            full plain text
+ *   s            full text (anchors included as U+FFFC, via get_slice)
  *   a(uua{sv})   character runs: (start_offset, end_offset, attributes)
  *   a(uus)       paragraph runs:  (start_offset, end_offset, alignment)
+ *   a(ub)        todo runs:       (anchor_offset, checked) -- V2 only
  * Offsets are in characters, matching GtkTextIter offsets. */
-#define RICH_TEXT_VARIANT_TYPE "(sa(uua{sv})a(uus))"
+#define RICH_TEXT_VARIANT_TYPE    "(sa(uua{sv})a(uus)a(ub))"
+#define RICH_TEXT_VARIANT_TYPE_V1 "(sa(uua{sv})a(uus))"
 
 /* Tag-name prefixes for value attributes. Toggle tags use the bare names
  * "b"/"i"/"u"/"s" and are matched by pointer instead. */
@@ -55,6 +61,10 @@ struct _GnomeStickyNotesRichText
 	GtkTextTag    *tag_italic;
 	GtkTextTag    *tag_underline;
 	GtkTextTag    *tag_strike;
+
+	/* Applied over a checked ToDo's text: strikethrough + faded. Derived from
+	 * the checkbox state, never stored as a character run. */
+	GtkTextTag    *tag_done;
 
 	/* Active formatting: what the next typed character gets, and what the
 	 * toolbar should display. Recomputed as the cursor moves. */
@@ -473,6 +483,269 @@ on_mark_set (GtkTextBuffer *buffer,
 	sync_state (self);
 }
 
+/* --- ToDo items ---------------------------------------------------------- */
+
+/* Mutes our own buffer handlers around a structural edit (anchor insert/delete,
+ * a programmatic newline) so it is not treated as interactive typing. Safe to
+ * nest: deserialize already blocks, and these just bump the block count. */
+static void
+block_buffer_signals (GnomeStickyNotesRichText *self)
+{
+	g_signal_handlers_block_by_func (self->buffer, on_insert_before, self);
+	g_signal_handlers_block_by_func (self->buffer, on_insert_after, self);
+	g_signal_handlers_block_by_func (self->buffer, on_mark_set, self);
+}
+
+static void
+unblock_buffer_signals (GnomeStickyNotesRichText *self)
+{
+	g_signal_handlers_unblock_by_func (self->buffer, on_insert_before, self);
+	g_signal_handlers_unblock_by_func (self->buffer, on_insert_after, self);
+	g_signal_handlers_unblock_by_func (self->buffer, on_mark_set, self);
+}
+
+/* Applies (or clears) the faded/struck "done" look over a todo's text, i.e.
+ * the line following its checkbox anchor. */
+static void
+apply_done (GnomeStickyNotesRichText *self,
+            GtkTextChildAnchor       *anchor,
+            gboolean                  done)
+{
+	GtkTextIter start, end;
+
+	gtk_text_buffer_get_iter_at_child_anchor (self->buffer, &start, anchor);
+	gtk_text_iter_forward_char (&start); /* step over the checkbox itself */
+	end = start;
+	if (!gtk_text_iter_ends_line (&end))
+		gtk_text_iter_forward_to_line_end (&end);
+
+	if (done)
+		{
+			GtkTextTagTable *table = gtk_text_buffer_get_tag_table (self->buffer);
+
+			/* Keep it above any user colour/strike so completed text always
+			 * reads as faded. */
+			gtk_text_tag_set_priority (self->tag_done,
+			                           gtk_text_tag_table_get_size (table) - 1);
+			gtk_text_buffer_apply_tag (self->buffer, self->tag_done, &start, &end);
+		}
+	else
+		gtk_text_buffer_remove_tag (self->buffer, self->tag_done, &start, &end);
+}
+
+static void
+on_checkbox_toggled (GtkCheckButton           *button,
+                     GnomeStickyNotesRichText *self)
+{
+	GtkTextChildAnchor *anchor = g_object_get_data (G_OBJECT (button), "gsn-anchor");
+
+	if (anchor == NULL || gtk_text_child_anchor_get_deleted (anchor))
+		return;
+
+	apply_done (self, anchor, gtk_check_button_get_active (button));
+}
+
+/* Strips the theme's chunky min-size/padding off the embedded checkbox so it
+ * lines up with the text instead of inflating the line height. Installed once
+ * for the whole display. */
+static void
+ensure_todo_css (GtkWidget *widget)
+{
+	static gsize once = 0;
+
+	if (g_once_init_enter (&once))
+		{
+			GtkCssProvider *provider = gtk_css_provider_new ();
+
+			/* Zero the theme's chunky button chrome and size the indicator to
+			 * the text; the small top margin drops it onto the text baseline
+			 * (a child widget in a GtkTextView line otherwise sits high). */
+			gtk_css_provider_load_from_string (provider,
+				"checkbutton.todo-check { min-height: 0; padding: 0; margin: 0; }"
+				"checkbutton.todo-check > check { min-height: 0.9em; min-width: 0.9em;"
+				" margin: 0; margin-top: 0.2em; }");
+			gtk_style_context_add_provider_for_display (gtk_widget_get_display (widget),
+				GTK_STYLE_PROVIDER (provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+			g_object_unref (provider);
+
+			g_once_init_leave (&once, 1);
+		}
+}
+
+/* Embeds a fresh checkbox at the given anchor and wires its toggle. */
+static GtkWidget *
+make_todo_checkbox (GnomeStickyNotesRichText *self,
+                    GtkTextChildAnchor       *anchor)
+{
+	GtkWidget *check = gtk_check_button_new ();
+
+	ensure_todo_css (GTK_WIDGET (self->view));
+
+	gtk_widget_set_focusable (check, FALSE); /* clickable, but never a tab stop */
+	gtk_widget_set_valign (check, GTK_ALIGN_CENTER);
+	gtk_widget_set_margin_end (check, 4);
+	gtk_widget_add_css_class (check, "todo-check");
+	g_object_set_data (G_OBJECT (check), "gsn-anchor", anchor);
+	g_signal_connect (check, "toggled", G_CALLBACK (on_checkbox_toggled), self);
+
+	gtk_text_view_add_child_at_anchor (self->view, check, anchor);
+	return check;
+}
+
+/* If the line containing iter begins with one of our todo checkboxes, returns
+ * that anchor; otherwise NULL. */
+static GtkTextChildAnchor *
+line_todo_anchor (const GtkTextIter *iter)
+{
+	GtkTextIter ls = *iter;
+	GtkTextChildAnchor *anchor;
+	GtkWidget **widgets;
+	guint n = 0;
+	gboolean is_todo;
+
+	gtk_text_iter_set_line_offset (&ls, 0);
+	anchor = gtk_text_iter_get_child_anchor (&ls);
+	if (anchor == NULL)
+		return NULL;
+
+	widgets = gtk_text_child_anchor_get_widgets (anchor, &n);
+	is_todo = (n > 0 && GTK_IS_CHECK_BUTTON (widgets[0]));
+	g_free (widgets);
+
+	return is_todo ? anchor : NULL;
+}
+
+/* Inserts a checkbox at *iter (advanced past it on return). */
+static void
+insert_todo_anchor_at (GnomeStickyNotesRichText *self,
+                       GtkTextIter              *iter,
+                       gboolean                  checked)
+{
+	GtkTextChildAnchor *anchor;
+	GtkWidget *check;
+
+	block_buffer_signals (self);
+	anchor = gtk_text_buffer_create_child_anchor (self->buffer, iter);
+	check = make_todo_checkbox (self, anchor);
+	if (checked)
+		gtk_check_button_set_active (GTK_CHECK_BUTTON (check), TRUE);
+	unblock_buffer_signals (self);
+}
+
+/* Converts a todo line back to plain text by removing its checkbox and any
+ * leftover "done" styling. */
+static void
+remove_todo (GnomeStickyNotesRichText *self,
+             GtkTextChildAnchor       *anchor)
+{
+	GtkTextIter start, end, le;
+
+	gtk_text_buffer_get_iter_at_child_anchor (self->buffer, &start, anchor);
+	end = start;
+	gtk_text_iter_forward_char (&end);
+
+	le = start;
+	if (!gtk_text_iter_ends_line (&le))
+		gtk_text_iter_forward_to_line_end (&le);
+	gtk_text_buffer_remove_tag (self->buffer, self->tag_done, &start, &le);
+
+	block_buffer_signals (self);
+	gtk_text_buffer_delete (self->buffer, &start, &end);
+	unblock_buffer_signals (self);
+
+	sync_state (self);
+}
+
+/* Enter/Backspace handling that gives todos their Notion-like flow. */
+static gboolean
+on_key_pressed (GtkEventControllerKey    *controller,
+                guint                     keyval,
+                guint                     keycode,
+                GdkModifierType           state,
+                GnomeStickyNotesRichText *self)
+{
+	GdkModifierType mods = state & gtk_accelerator_get_default_mod_mask ();
+	GtkTextIter cursor;
+	GtkTextChildAnchor *anchor;
+
+	if (mods != 0)
+		return GDK_EVENT_PROPAGATE;
+
+	gtk_text_buffer_get_iter_at_mark (self->buffer, &cursor,
+	                                  gtk_text_buffer_get_insert (self->buffer));
+	anchor = line_todo_anchor (&cursor);
+	if (anchor == NULL)
+		return GDK_EVENT_PROPAGATE;
+
+	if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
+		{
+			GtkTextIter ls = cursor, le;
+
+			gtk_text_iter_set_line_offset (&ls, 0);
+			le = ls;
+			if (!gtk_text_iter_ends_line (&le))
+				gtk_text_iter_forward_to_line_end (&le);
+
+			/* Empty todo (just the checkbox): leave the list. */
+			if (gtk_text_iter_get_offset (&le) - gtk_text_iter_get_offset (&ls) <= 1)
+				{
+					remove_todo (self, anchor);
+					return GDK_EVENT_STOP;
+				}
+
+			/* Otherwise split the line and start a new todo below. */
+			gtk_text_buffer_begin_user_action (self->buffer);
+			gtk_text_buffer_insert (self->buffer, &cursor, "\n", 1);
+			insert_todo_anchor_at (self, &cursor, FALSE);
+			gtk_text_buffer_place_cursor (self->buffer, &cursor);
+			gtk_text_buffer_end_user_action (self->buffer);
+			sync_state (self);
+			return GDK_EVENT_STOP;
+		}
+
+	if (keyval == GDK_KEY_BackSpace &&
+	    !gtk_text_buffer_get_has_selection (self->buffer) &&
+	    gtk_text_iter_get_line_offset (&cursor) == 1)
+		{
+			remove_todo (self, anchor);
+			return GDK_EVENT_STOP;
+		}
+
+	return GDK_EVENT_PROPAGATE;
+}
+
+void
+gnome_sticky_notes_rich_text_insert_todo (GnomeStickyNotesRichText *self)
+{
+	GtkTextIter cursor, ls;
+	GtkTextChildAnchor *anchor;
+
+	g_return_if_fail (GNOME_STICKY_NOTES_IS_RICH_TEXT (self));
+
+	gtk_text_buffer_get_iter_at_mark (self->buffer, &cursor,
+	                                  gtk_text_buffer_get_insert (self->buffer));
+
+	/* Toggle: a second press on a todo line turns it back into plain text. */
+	anchor = line_todo_anchor (&cursor);
+	if (anchor != NULL)
+		{
+			remove_todo (self, anchor);
+			gtk_widget_grab_focus (GTK_WIDGET (self->view));
+			return;
+		}
+
+	ls = cursor;
+	gtk_text_iter_set_line_offset (&ls, 0);
+
+	gtk_text_buffer_begin_user_action (self->buffer);
+	insert_todo_anchor_at (self, &ls, FALSE);
+	gtk_text_buffer_place_cursor (self->buffer, &ls); /* just after the checkbox */
+	gtk_text_buffer_end_user_action (self->buffer);
+
+	gtk_widget_grab_focus (GTK_WIDGET (self->view));
+	sync_state (self);
+}
+
 /* --- public formatting commands ------------------------------------------ */
 
 static gboolean
@@ -720,7 +993,7 @@ build_attr_dict (GnomeStickyNotesRichText *self,
 char *
 gnome_sticky_notes_rich_text_serialize (GnomeStickyNotesRichText *self)
 {
-	GVariantBuilder chars, paras;
+	GVariantBuilder chars, paras, todos;
 	GtkTextIter start, end, it;
 	g_autofree char *text = NULL;
 	g_autofree char *printed = NULL;
@@ -730,7 +1003,9 @@ gnome_sticky_notes_rich_text_serialize (GnomeStickyNotesRichText *self)
 	g_return_val_if_fail (GNOME_STICKY_NOTES_IS_RICH_TEXT (self), NULL);
 
 	gtk_text_buffer_get_bounds (self->buffer, &start, &end);
-	text = gtk_text_buffer_get_text (self->buffer, &start, &end, FALSE);
+	/* get_slice (not get_text) keeps the U+FFFC placeholder for each checkbox
+	 * anchor, so character/paragraph offsets stay aligned with the buffer. */
+	text = gtk_text_buffer_get_slice (self->buffer, &start, &end, TRUE);
 
 	/* Character runs. */
 	g_variant_builder_init (&chars, G_VARIANT_TYPE ("a(uua{sv})"));
@@ -775,7 +1050,32 @@ gnome_sticky_notes_rich_text_serialize (GnomeStickyNotesRichText *self)
 				                       align_to_string (just));
 		}
 
-	variant = g_variant_new ("(sa(uua{sv})a(uus))", text, &chars, &paras);
+	/* ToDo runs: one (offset, checked) per line that starts with a checkbox. */
+	g_variant_builder_init (&todos, G_VARIANT_TYPE ("a(ub)"));
+	for (i = 0; i < n_lines; i++)
+		{
+			GtkTextIter ls;
+			GtkTextChildAnchor *anchor;
+
+			gtk_text_buffer_get_iter_at_line (self->buffer, &ls, i);
+			anchor = line_todo_anchor (&ls);
+			if (anchor != NULL)
+				{
+					GtkWidget **widgets;
+					guint nw = 0;
+					gboolean checked;
+
+					widgets = gtk_text_child_anchor_get_widgets (anchor, &nw);
+					checked = (nw > 0 && gtk_check_button_get_active (GTK_CHECK_BUTTON (widgets[0])));
+					g_free (widgets);
+
+					g_variant_builder_add (&todos, "(ub)",
+					                       (guint32) gtk_text_iter_get_offset (&ls),
+					                       checked);
+				}
+		}
+
+	variant = g_variant_new ("(sa(uua{sv})a(uus)a(ub))", text, &chars, &paras, &todos);
 	printed = g_variant_print (variant, TRUE);
 	g_variant_unref (g_variant_ref_sink (variant));
 
@@ -784,18 +1084,21 @@ gnome_sticky_notes_rich_text_serialize (GnomeStickyNotesRichText *self)
 
 static void
 deserialize_rich (GnomeStickyNotesRichText *self,
-                  const char               *payload)
+                  const char               *payload,
+                  gboolean                  v1)
 {
 	g_autoptr (GVariant) variant = NULL;
 	g_autoptr (GError) error = NULL;
 	g_autoptr (GVariant) chars = NULL;
 	g_autoptr (GVariant) paras = NULL;
+	g_autoptr (GVariant) todos = NULL;
 	const char *text = NULL;
 	GVariantIter iter;
 	guint32 cs, ce;
 	GVariant *dict;
 
-	variant = g_variant_parse (G_VARIANT_TYPE (RICH_TEXT_VARIANT_TYPE),
+	variant = g_variant_parse (G_VARIANT_TYPE (v1 ? RICH_TEXT_VARIANT_TYPE_V1
+	                                              : RICH_TEXT_VARIANT_TYPE),
 	                           payload, NULL, NULL, &error);
 	if (variant == NULL)
 		{
@@ -804,7 +1107,11 @@ deserialize_rich (GnomeStickyNotesRichText *self,
 			return;
 		}
 
-	g_variant_get (variant, "(&s@a(uua{sv})@a(uus))", &text, &chars, &paras);
+	if (v1)
+		g_variant_get (variant, "(&s@a(uua{sv})@a(uus))", &text, &chars, &paras);
+	else
+		g_variant_get (variant, "(&s@a(uua{sv})@a(uus)@a(ub))", &text, &chars, &paras, &todos);
+
 	gtk_text_buffer_set_text (self->buffer, text ? text : "", -1);
 
 	/* Character runs. */
@@ -867,6 +1174,27 @@ deserialize_rich (GnomeStickyNotesRichText *self,
 				gtk_text_buffer_apply_tag (self->buffer, align_tag (self, just), &s, &e);
 			}
 	}
+
+	/* ToDo runs: turn each U+FFFC placeholder back into a real checkbox.
+	 * Deleting one char and inserting an anchor is net-zero, so offsets of
+	 * later todos (emitted in ascending order) stay valid. */
+	if (todos != NULL)
+		{
+			guint32 off;
+			gboolean checked;
+
+			g_variant_iter_init (&iter, todos);
+			while (g_variant_iter_next (&iter, "(ub)", &off, &checked))
+				{
+					GtkTextIter it, it2;
+
+					gtk_text_buffer_get_iter_at_offset (self->buffer, &it, off);
+					it2 = it;
+					gtk_text_iter_forward_char (&it2);
+					gtk_text_buffer_delete (self->buffer, &it, &it2);
+					insert_todo_anchor_at (self, &it, checked);
+				}
+		}
 }
 
 void
@@ -882,7 +1210,9 @@ gnome_sticky_notes_rich_text_deserialize (GnomeStickyNotesRichText *self,
 	g_signal_handlers_block_by_func (self->buffer, on_mark_set, self);
 
 	if (data != NULL && g_str_has_prefix (data, RICH_TEXT_MARKER))
-		deserialize_rich (self, data + strlen (RICH_TEXT_MARKER));
+		deserialize_rich (self, data + strlen (RICH_TEXT_MARKER), FALSE);
+	else if (data != NULL && g_str_has_prefix (data, RICH_TEXT_MARKER_V1))
+		deserialize_rich (self, data + strlen (RICH_TEXT_MARKER_V1), TRUE);
 	else
 		gtk_text_buffer_set_text (self->buffer, data ? data : "", -1);
 
@@ -948,12 +1278,34 @@ gnome_sticky_notes_rich_text_new (GtkTextView *view)
 	self->tag_underline = gtk_text_buffer_create_tag (self->buffer, "u", "underline", PANGO_UNDERLINE_SINGLE, NULL);
 	self->tag_strike    = gtk_text_buffer_create_tag (self->buffer, "s", "strikethrough", TRUE, NULL);
 
+	{
+		/* Completed-todo styling: struck through and faded to 50% of the
+		 * view's text colour. Priority is re-asserted on each apply. */
+		GdkRGBA c;
+
+		gtk_widget_get_color (GTK_WIDGET (view), &c);
+		c.alpha = 0.5;
+		self->tag_done = gtk_text_buffer_create_tag (self->buffer, "done",
+		                                             "strikethrough", TRUE,
+		                                             "foreground-rgba", &c,
+		                                             NULL);
+	}
+
 	g_signal_connect (self->buffer, "insert-text",
 	                  G_CALLBACK (on_insert_before), self);
 	g_signal_connect_after (self->buffer, "insert-text",
 	                        G_CALLBACK (on_insert_after), self);
 	g_signal_connect (self->buffer, "mark-set",
 	                  G_CALLBACK (on_mark_set), self);
+
+	{
+		/* Capture Enter/Backspace before the view so todos behave like a list. */
+		GtkEventController *key = gtk_event_controller_key_new ();
+
+		gtk_event_controller_set_propagation_phase (key, GTK_PHASE_CAPTURE);
+		g_signal_connect (key, "key-pressed", G_CALLBACK (on_key_pressed), self);
+		gtk_widget_add_controller (GTK_WIDGET (view), key);
+	}
 
 	return self;
 }
