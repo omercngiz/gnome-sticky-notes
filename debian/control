@@ -1,0 +1,30 @@
+Source: gnome-sticky-notes
+Section: gnome
+Priority: optional
+Maintainer: Omer Cengiz <omer.my.acc@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               meson (>= 1.0.0),
+               ninja-build,
+               pkg-config,
+               gettext,
+               desktop-file-utils,
+               libglib2.0-dev,
+               libgtk-4-dev,
+               libadwaita-1-dev (>= 1.5),
+               libsqlite3-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/omercngiz/gnome-sticky-notes
+Rules-Requires-Root: no
+
+Package: gnome-sticky-notes
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: xdg-utils
+Description: desktop sticky notes with rich text and to-do lists
+ GNOME Sticky Notes keeps small rich-text notes on your desktop. It runs as a
+ background service with a status-notifier tray icon, restores your notes at
+ login, and supports bold/italic/underline, fonts, colours, alignment, and
+ inline checkable to-do items.
+ .
+ Notes are stored locally in SQLite and can be exported, imported, or emailed
+ to yourself as a backup.

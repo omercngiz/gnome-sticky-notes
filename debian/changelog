@@ -1,0 +1,6 @@
+gnome-sticky-notes (0.1.0) unstable; urgency=medium
+
+  * Initial release: rich-text sticky notes daemon with tray, autostart,
+    settings, inline to-do items, and local/email backup.
+
+ -- Omer Cengiz <omer.my.acc@gmail.com>  Wed, 24 Jun 2026 07:43:56 +0300

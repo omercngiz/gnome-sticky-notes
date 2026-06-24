@@ -1,10 +1,12 @@
 [Desktop Entry]
-Name=Gnome-sticky-notes
+Name=Sticky Notes
+GenericName=Sticky Notes
+Comment=Keep rich-text sticky notes and to-do lists on your desktop
 Exec=gnome-sticky-notes
 Icon=io.omercngiz.GnomeStickyNotes
 Terminal=false
 Type=Application
-Categories=Utility;
-Keywords=GTK;
+Categories=Utility;GTK;
+Keywords=notes;sticky;todo;memo;reminder;
 StartupNotify=true
 DBusActivatable=true

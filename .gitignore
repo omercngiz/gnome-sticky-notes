@@ -1,0 +1,23 @@
+# Build output
+/_build/
+/build/
+/build-flatpak/
+/.flatpak-builder/
+
+# Local packaging artifacts
+*.deb
+*.ddeb
+*.buildinfo
+*.changes
+*.tar.*
+
+# Debian build by-products (keep the debian/ source files, ignore generated)
+debian/.debhelper/
+debian/files
+debian/debhelper-build-stamp
+debian/*.substvars
+debian/*.log
+debian/gnome-sticky-notes/
+
+# Private maintainer notes (not for the public repo)
+DEV_NOTES.md

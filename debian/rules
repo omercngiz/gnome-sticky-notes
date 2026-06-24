@@ -1,0 +1,8 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=meson
+
+# The meson test suite only runs metadata validators (appstream / desktop-file)
+# which need network or extra tooling; skip them during package builds.
+override_dh_auto_test:
