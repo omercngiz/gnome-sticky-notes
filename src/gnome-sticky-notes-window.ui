@@ -12,13 +12,6 @@
           <object class="AdwHeaderBar">
             <property name="show-title">False</property>
             <child type="start">
-              <object class="GtkButton">
-                <property name="icon-name">list-add-symbolic</property>
-                <property name="tooltip-text" translatable="yes">New Note</property>
-                <property name="action-name">app.new-note</property>
-              </object>
-            </child>
-            <child type="end">
               <object class="GtkMenuButton">
                 <property name="primary">True</property>
                 <property name="icon-name">open-menu-symbolic</property>
@@ -26,11 +19,152 @@
                 <property name="menu-model">primary_menu</property>
               </object>
             </child>
-            <child type="end">
-              <object class="GtkButton">
-                <property name="icon-name">user-trash-symbolic</property>
-                <property name="tooltip-text" translatable="yes">Delete Note</property>
-                <property name="action-name">win.delete</property>
+            <child type="start">
+              <object class="GtkMenuButton" id="format_button">
+                <property name="icon-name">format-text-rich-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Text Formatting</property>
+                <property name="popover">
+                  <object class="GtkPopover" id="format_popover">
+                    <!-- Keep the toolbar open while the nested font/colour
+                         dialogs are shown: an autohide popover loses its grab
+                         to the dialog and would close on the first click. We
+                         dismiss it ourselves when focus returns to the text. -->
+                    <property name="autohide">False</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">10</property>
+                        <property name="margin-top">8</property>
+                        <property name="margin-bottom">8</property>
+                        <property name="margin-start">8</property>
+                        <property name="margin-end">8</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="spacing">0</property>
+                            <property name="homogeneous">True</property>
+                            <style>
+                              <class name="linked"/>
+                            </style>
+                            <child>
+                              <object class="GtkToggleButton" id="bold_button">
+                                <property name="icon-name">format-text-bold-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Bold (Ctrl+B)</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="italic_button">
+                                <property name="icon-name">format-text-italic-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Italic (Ctrl+I)</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="underline_button">
+                                <property name="icon-name">format-text-underline-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Underline (Ctrl+U)</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="strike_button">
+                                <property name="icon-name">format-text-strikethrough-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Strikethrough</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkFontDialogButton" id="font_button">
+                                <property name="hexpand">True</property>
+                                <property name="level">family</property>
+                                <property name="tooltip-text" translatable="yes">Font</property>
+                                <property name="dialog">
+                                  <object class="GtkFontDialog"/>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkSpinButton" id="size_spin">
+                                <property name="tooltip-text" translatable="yes">Font Size</property>
+                                <!-- numeric only: letters/symbols are rejected
+                                     and values clamp to the adjustment range.
+                                     (editable=False would also kill the +/-
+                                     steppers, so we don't use it.) -->
+                                <property name="numeric">True</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">6</property>
+                                    <property name="upper">96</property>
+                                    <property name="step-increment">1</property>
+                                    <property name="page-increment">4</property>
+                                    <property name="value">11</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="spacing">0</property>
+                            <property name="homogeneous">True</property>
+                            <style>
+                              <class name="linked"/>
+                            </style>
+                            <child>
+                              <object class="GtkToggleButton" id="align_left_button">
+                                <property name="icon-name">format-justify-left-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Align Left (Ctrl+Shift+L)</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="align_center_button">
+                                <property name="icon-name">format-justify-center-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Align Center (Ctrl+Shift+E)</property>
+                                <property name="group">align_left_button</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="align_right_button">
+                                <property name="icon-name">format-justify-right-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Align Right (Ctrl+Shift+R)</property>
+                                <property name="group">align_left_button</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkToggleButton" id="align_fill_button">
+                                <property name="icon-name">format-justify-fill-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Justify (Ctrl+Shift+J)</property>
+                                <property name="group">align_left_button</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">Text Color</property>
+                                <property name="hexpand">True</property>
+                                <property name="xalign">0</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkColorDialogButton" id="color_button">
+                                <property name="tooltip-text" translatable="yes">Text Color</property>
+                                <property name="dialog">
+                                  <object class="GtkColorDialog"/>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </property>
               </object>
             </child>
           </object>
@@ -42,10 +176,12 @@
             <property name="child">
               <object class="GtkTextView" id="text_view">
                 <property name="wrap-mode">word-char</property>
-                <property name="top-margin">8</property>
-                <property name="bottom-margin">8</property>
-                <property name="left-margin">8</property>
-                <property name="right-margin">8</property>
+                <property name="top-margin">14</property>
+                <property name="bottom-margin">14</property>
+                <property name="left-margin">16</property>
+                <property name="right-margin">16</property>
+                <property name="pixels-above-lines">1</property>
+                <property name="pixels-below-lines">1</property>
               </object>
             </property>
           </object>
@@ -58,20 +194,29 @@
       <item>
         <attribute name="label" translatable="yes">_New Note</attribute>
         <attribute name="action">app.new-note</attribute>
+        <attribute name="icon">list-add-symbolic</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Delete Note</attribute>
+        <attribute name="action">win.delete</attribute>
+        <attribute name="icon">user-trash-symbolic</attribute>
       </item>
     </section>
     <section>
       <item>
         <attribute name="label" translatable="yes">_Settings</attribute>
         <attribute name="action">app.preferences</attribute>
+        <attribute name="icon">preferences-system-symbolic</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">_About Gnome Sticky Notes</attribute>
+        <attribute name="label" translatable="yes">_About</attribute>
         <attribute name="action">app.about</attribute>
+        <attribute name="icon">help-about-symbolic</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Quit</attribute>
         <attribute name="action">app.quit</attribute>
+        <attribute name="icon">application-exit-symbolic</attribute>
       </item>
     </section>
   </menu>

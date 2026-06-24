@@ -4,6 +4,9 @@ data/io.omercngiz.GnomeStickyNotes.desktop.in
 data/io.omercngiz.GnomeStickyNotes.metainfo.xml.in
 data/io.omercngiz.GnomeStickyNotes.gschema.xml
 src/gnome-sticky-notes-application.c
+src/gnome-sticky-notes-preferences.c
+src/gnome-sticky-notes-preferences.ui
 src/gnome-sticky-notes-tray.c
+src/gnome-sticky-notes-window.c
 src/gnome-sticky-notes-window.ui
 src/main.c

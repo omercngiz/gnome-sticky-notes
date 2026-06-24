@@ -27,16 +27,14 @@ typedef struct
   const char *label;   /* untranslated; run through gettext at build time */
   const char *action;  /* "app.<name>" or NULL */
   const char *type;    /* "separator" or NULL for a standard item */
+  const char *icon;    /* themed icon name or NULL */
 } MenuItem;
 
 static const MenuItem menu_items[] = {
-  { 1, N_ ("New Note"),       "app.new-note",    NULL },
-  { 2, N_ ("Show All Notes"), "app.show-all",    NULL },
-  { 3, NULL,                  NULL,              "separator" },
-  { 4, N_ ("Settings"),       "app.preferences", NULL },
-  { 5, N_ ("About"),          "app.about",       NULL },
-  { 6, NULL,                  NULL,              "separator" },
-  { 7, N_ ("Quit"),           "app.quit",        NULL },
+  { 1, N_ ("New Note"),       "app.new-note", NULL,        "list-add-symbolic" },
+  { 2, N_ ("Show All Notes"), "app.show-all", NULL,        "view-grid-symbolic" },
+  { 3, NULL,                  NULL,           "separator", NULL },
+  { 4, N_ ("Quit"),           "app.quit",     NULL,        "application-exit-symbolic" },
 };
 
 struct _GnomeStickyNotesTray
@@ -174,6 +172,9 @@ build_item_props (GVariantBuilder *props,
 
   if (item->label != NULL)
     g_variant_builder_add (props, "{sv}", "label", g_variant_new_string (_ (item->label)));
+
+  if (item->icon != NULL)
+    g_variant_builder_add (props, "{sv}", "icon-name", g_variant_new_string (item->icon));
 
   g_variant_builder_add (props, "{sv}", "enabled", g_variant_new_boolean (TRUE));
   g_variant_builder_add (props, "{sv}", "visible", g_variant_new_boolean (TRUE));

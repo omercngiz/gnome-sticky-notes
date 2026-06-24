@@ -3,13 +3,15 @@ gnome_sticky_notes_sources = [
   'gnome-sticky-notes-application.c',
   'gnome-sticky-notes-autostart.c',
   'gnome-sticky-notes-database.c',
+  'gnome-sticky-notes-preferences.c',
+  'gnome-sticky-notes-richtext.c',
   'gnome-sticky-notes-tray.c',
   'gnome-sticky-notes-window.c',
 ]
 
 gnome_sticky_notes_deps = [
   dependency('gtk4'),
-  dependency('libadwaita-1', version: '>= 1.4'),
+  dependency('libadwaita-1', version: '>= 1.5'),
   dependency('sqlite3'),
 ]
 

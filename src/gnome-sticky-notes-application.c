@@ -11,6 +11,7 @@
 #include "gnome-sticky-notes-application.h"
 #include "gnome-sticky-notes-autostart.h"
 #include "gnome-sticky-notes-database.h"
+#include "gnome-sticky-notes-preferences.h"
 #include "gnome-sticky-notes-tray.h"
 #include "gnome-sticky-notes-window.h"
 
@@ -242,8 +243,17 @@ gnome_sticky_notes_application_preferences_action (GSimpleAction *action,
                                                    GVariant *parameter,
                                                    gpointer user_data)
 {
-  /* TODO: settings window (theme, color, startup, Google accounts). */
-  g_message ("Settings are not implemented yet.");
+  GnomeStickyNotesApplication *self = user_data;
+  GnomeStickyNotesPreferences *prefs;
+  GtkWindow *window;
+
+  g_assert (GNOME_STICKY_NOTES_IS_APPLICATION (self));
+
+  /* The dialog needs a parent to anchor to; when no note window is open
+   * (tray-only) it still presents fine with a NULL parent. */
+  window = gtk_application_get_active_window (GTK_APPLICATION (self));
+  prefs = gnome_sticky_notes_preferences_new ();
+  adw_dialog_present (ADW_DIALOG (prefs), window ? GTK_WIDGET (window) : NULL);
 }
 
 static void
