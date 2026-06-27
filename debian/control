@@ -13,7 +13,7 @@ Build-Depends: debhelper-compat (= 13),
                libadwaita-1-dev (>= 1.5),
                libsqlite3-dev
 Standards-Version: 4.6.2
-Homepage: https://github.com/omercngiz/gnome-sticky-notes
+Homepage: https://github.com/omercngiz/sticky-notes
 Rules-Requires-Root: no
 
 Package: sticky-notes
