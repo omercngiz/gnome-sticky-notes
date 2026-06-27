@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📝 GNOME Sticky Notes
+# 📝 Sticky Notes for GNOME Desktop
 
 **Little notes that live on your desktop.**
 
